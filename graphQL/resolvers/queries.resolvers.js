@@ -1,4 +1,4 @@
-const { AuthenticationError } = require('apollo-server');
+const { ApolloError } = require('apollo-server');
 const Sequelize = require('sequelize');
 const db = require('../../models/index');
 
@@ -9,57 +9,19 @@ function escapeRegexCharacters(str) {
 }
 
 exports.roadmaps = async (obj, args, { user }) => {
-  if (!user) throw new AuthenticationError('You must be logged in');
-
+  const findQuery = { offset: args.offset || 0, limit: args.limit || 20 };
+  // Create the where property for the database query, if applicable
   if (args.title) {
     const regex = escapeRegexCharacters(args.title.trim());
-    const where = {
-      title: { [Op.iRegexp]: regex },
-    };
-    if (args.category) where.category = args.category;
-    return db.Roadmaps.findAll(
-      {
-        offset: args.offset || 0,
-        limit: args.limit || 20,
-        where,
-      },
-    );
+    findQuery.where = { title: { [Op.iRegexp]: regex } };
   }
-
-  if (args.category) {
-    return db.Roadmaps.findAll({
-      offset: args.offset || 0,
-      limit: args.limit || 20,
-      where: { category: args.category },
-    });
-  }
-  // returns one roadmap by id
-  if (args.id) {
-    return db.Roadmaps.findAll({
-      where: { id: args.id },
-    });
-  }
-  // returns all roadmaps
-  if (!args.UserId) {
-    const test = await db.Roadmaps.findAll({
-      offset: args.offset || 0,
-      limit: args.limit || 20,
-    });
-    return test;
-  }
-  // Return all roadmaps from the logedin user
-  if (args.UserId === String(user.id)) {
-    return db.Roadmaps.findAll({
-      offset: args.offset || 0,
-      limit: args.limit || 20,
-      where: { UserId: args.UserId },
-    });
-  }
-  throw new Error('incorrect user');
+  if (args.category) findQuery.where = { ...findQuery.where, category: args.category };
+  if (args.id) findQuery.where = { ...findQuery.where, id: args.id };
+  if (args.UserId === String(user.id)) findQuery.where = { UserId: args.UserId };
+  return db.Roadmaps.findAll(findQuery);
 };
 
-exports.topics = async (obj, args, { user }) => {
-  if (!user) throw new AuthenticationError('You must be logged in');
+exports.topics = async (obj, args) => {
   const { RoadmapId, TopicId } = args;
   if (TopicId) {
     const topic = await db.Topics.findOne({ where: { id: TopicId } });
@@ -69,5 +31,5 @@ exports.topics = async (obj, args, { user }) => {
     const topics = await db.Topics.findAll({ where: { RoadmapId } });
     return topics;
   }
-  throw new Error('please pass either a TopicId or a RoadmapId');
+  throw new ApolloError('Please pass either a TopicId or a RoadmapId', 'BAD_REQUEST');
 };
